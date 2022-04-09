@@ -1,5 +1,0 @@
-*.ddb
-.hypothesis/
-.pytest_cache/
-dist
-gadwall.egg-info/
