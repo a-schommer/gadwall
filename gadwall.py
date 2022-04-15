@@ -12,8 +12,110 @@ except ImportError:
 
 import duckdb
 
-__version__ = '0.2.0'
+__version__ = '0.2.3'
 
+###############################################################################
+
+# readable, editable way to define the frame characters:
+FRAME_FANCY = "╔═╤═╗" + \
+              "║ │ ║" + \
+              "╠═╪═╣" + \
+              "║ │ ║" + \
+              "╟─┼─╢" + \
+              "║ │ ║" + \
+              "╚═╧═╝" 
+FRAME_THIN = "┌─┬─┐" + \
+             "│ │ │" + \
+             "├─┼─┤" + \
+             "│ │ │" + \
+             "├─┼─┤" + \
+             "│ │ │" + \
+             "└─┴─┘" 
+FRAME_RAW = "+-+-+" + \
+            "| | |" + \
+            "+-+-+" + \
+            "| | |" + \
+            "+-+-+" + \
+            "| | |" + \
+            "+-+-+" 
+# offsets of the relevant, distinguishable frame chars:
+# ╔═╤═╗ offsets 0..4
+# ║ │ ║ offsets 5..9
+# ╠═╪═╣ offsets 10..14
+# ║ │ ║ offsets 15..19
+# ╟─┼─╢ offsets 20..24
+# ║ │ ║ offsets 25..29
+# ╚═╧═╝ offsets 30..34
+# the corners:
+FCO_CORNER_UPPER_LEFT  = 0
+FCO_CORNER_UPPER_RIGHT = 4
+FCO_CORNER_LOWER_LEFT  = 30
+FCO_CORNER_LOWER_RIGHT = 34
+# the outer "bars":
+FCO_OUTER_BAR_TOP    = 1
+FCO_OUTER_BAR_LEFT   = 5
+FCO_OUTER_BAR_RIGHT  = 9
+FCO_OUTER_BAR_BOTTOM = 31
+# the half-junctions: where inner line join the outer frame:
+FCO_JUNCTION_TOP        = 2
+FCO_JUNCTION_HEAD_LEFT  = 10    # between head and content
+FCO_JUNCTION_HEAD_RIGHT = 14    # between head and content
+FCO_JUNCTION_LEFT       = 20
+FCO_JUNCTION_RIGHT      = 24
+FCO_JUNCTION_BOTTOM     = 32
+# inner lines:
+FCO_HEAD_BAR_HORIZONTAL  = 11  # between head and content
+FCO_INNER_BAR_HORIZONTAL = 21
+FCO_INNER_BAR_VERTICAL   = 7
+# inner junction/cross:
+FCO_INNER_JUNCTION_HEAD = 12    # between head and content
+FCO_INNER_JUNCTION      = 22
+
+#v22## ###############################################################################
+#v22## 
+#v22## # readable, editable way to define the frame characters:
+#v22## FRAME_FANCY = "┌─┬─┐" + \
+#v22##               "│ │ │" + \
+#v22##               "├─┼─┤" + \
+#v22##               "│ │ │" + \
+#v22##               "└─┴─┘" 
+#v22## FRAME_FALLBACK = "+-+-+" + \
+#v22##                  "| | |" + \
+#v22##                  "+-+-+" + \
+#v22##                  "| | |" + \
+#v22##                  "+-+-+" 
+#v22## FRAME_FRAME2 = "╔═╤═╗" + \
+#v22##                "║ │ ║" + \
+#v22##                "╟─┼─╢" + \
+#v22##                "║ │ ║" + \
+#v22##                "╚═╧═╝" 
+#v22## # offsets of the relevant, distinguishable frame chars:
+#v22## # ┌─┬─┐ offsets 0..4
+#v22## # │ │ │ offsets 5..9
+#v22## # ├─┼─┤ offsets 10..14
+#v22## # │ │ │ offsets 15..19
+#v22## # └─┴─┘ offsets 20..24
+#v22## # the corners:
+#v22## FCO_CORNER_UPPER_LEFT  = 0
+#v22## FCO_CORNER_UPPER_RIGHT = 4
+#v22## FCO_CORNER_LOWER_LEFT  = 20
+#v22## FCO_CORNER_LOWER_RIGHT = 24
+#v22## # the outer "bars":
+#v22## FCO_OUTER_BAR_TOP    = 1
+#v22## FCO_OUTER_BAR_LEFT   = 5
+#v22## FCO_OUTER_BAR_RIGHT  = 9
+#v22## FCO_OUTER_BAR_BOTTOM = 21
+#v22## # the half-junctions: where inner line join the outer frame:
+#v22## FCO_JUNCTION_TOP    = 2
+#v22## FCO_JUNCTION_LEFT   = 10
+#v22## FCO_JUNCTION_RIGHT  = 14
+#v22## FCO_JUNCTION_BOTTOM = 22
+#v22## # inner lines:
+#v22## FCO_INNER_BAR_HORIZONTAL = 11
+#v22## FCO_INNER_BAR_VERTICAL   = 7
+#v22## # inner junction/cross:
+#v22## FCO_INNER_JUNCTION = 12
+#v22## 
 ###############################################################################
 
 HTMLHEADER = """
@@ -99,6 +201,15 @@ class DotCmd(Cmd):
                         return
                 except AttributeError:
                     pass
+                if arg[0] == '.':
+                    try:
+                        print('?', 'do_dot_' + arg[1:])
+                        doc=getattr(self, 'do_dot_' + arg[1:]).__doc__
+                        if doc:
+                            self.stdout.write("%s\n"%str(doc))
+                            return
+                    except AttributeError:
+                        pass
                 self.stdout.write("%s\n"%str(self.nohelp % (arg,)))
                 return
             func()
@@ -149,6 +260,8 @@ class Gadwall(DotCmd):
     intro = 'Welcome to the gadwall, a duckdb shell. Type help or ? to list commands.\n'
     prompt = 'duckdb> '
     htmlFile = None
+    framecharset = FRAME_FANCY
+    framing_name = 'FANCY'
 
     def __init__(self, file_name):
         super().__init__()
@@ -199,6 +312,18 @@ class Gadwall(DotCmd):
         else:
             self.openHTML(arg)
 
+    def do_dot_frame(self, arg):
+        """select the framing (in the terminal): one "raw" (ASCII only), "fancy" (frame chars) and "thin" (like "fancy", but single outlines)"""
+        arg = arg.strip()
+        charsetname = arg.upper()
+        try:
+            self.framecharset = globals()['FRAME_'+charsetname]
+            self.framing_name = charsetname
+        except KeyError:
+            if charsetname:
+                print('unrecognized .frame choice', arg)
+        print('current framing:', self.framing_name)
+
     def default(self, arg):
         if not arg.strip():
             return
@@ -206,9 +331,15 @@ class Gadwall(DotCmd):
         self.writeHTML('<h2>%s</h2>\n' % arg)
         try:
             self.conn.execute(arg)
-            self.print_tabled()
         except RuntimeError as err:
             print(f'ERROR: {err}')
+            return
+        if arg.lower().startswith('explain '):
+            for row in self.conn.fetchall():
+                print(row[0]+':\n'+row[1])
+                self.writeHTML('<h3>%s:</h3><pre style=\'font-family: "Lucida Console", monospace;\'>%s</pre>\n' % row)
+        else:
+            self.print_tabled()
 
     def emptyline(self):
         # Override default of repeating last command
@@ -233,6 +364,15 @@ class Gadwall(DotCmd):
             print('html file "%s" closed' % self.htmlFile.name)
             self.htmlFile = None
 
+    def bar(self, col_widths, fco_left, fco_cell, fco_junction, fco_right):
+        """ helper function to print_tabled: build a frame line: 
+            chars according to self.framecharset; cell "widths" according to col_widths
+            fco_left/right: offset to the left/right "border"/juntion,
+            fco_cell: ... to the char "within" the cells
+            fco_junction: ... to the char "between" the cells
+        """
+        return self.framecharset[fco_left] + self.framecharset[fco_junction].join(self.framecharset[fco_cell]*col_widths[i] for i in range(len(col_widths))) + self.framecharset[fco_right]
+
     def print_tabled(self):
         """ print the just queried with headline to console and the HTML file """
 
@@ -250,28 +390,31 @@ class Gadwall(DotCmd):
         else:
             col_width = [ len(self.conn.description[col][0]) for col in range(len(self.conn.description)) ]
             formats = [ '%'+str(col_width[i])+'s' for i in range(len(self.conn.description)) ]
-        line_format = '|' + '|'.join(formats) + '|'
+        line_format = self.framecharset[FCO_OUTER_BAR_LEFT] + self.framecharset[FCO_INNER_BAR_VERTICAL].join(formats) + self.framecharset[FCO_OUTER_BAR_RIGHT]
         if self.htmlFile:
             html_line_format = '<tr>' + '\n'.join([ '\t<td %s>%%s</td>' % html_aligns[i] for i in range(len(self.conn.description)) ]) + '\n</tr>\n'
-        sep = '+' + '+'.join('-'*col_width[i] for i in range(len(self.conn.description))) + '+'
-        print(sep)
+        print(self.bar(col_width, FCO_CORNER_UPPER_LEFT, FCO_OUTER_BAR_TOP, FCO_JUNCTION_TOP, FCO_CORNER_UPPER_RIGHT))
         # columns headers:
         print(line_format % tuple( self.conn.description[i][0] for i in range(len(self.conn.description)) ) )
-        print(sep)
         if self.htmlFile:
             self.writeHTML('<table><thead><tr>' + \
                             '\n'.join([ '\t<td>%s</td>' % self.conn.description[i][0] for i in range(len(self.conn.description)) ]) + \
                             '\n</tr></thead>\n<tbody>\n')
         if data:
+            innerbar = self.bar(col_width, FCO_JUNCTION_HEAD_LEFT, FCO_HEAD_BAR_HORIZONTAL, FCO_INNER_JUNCTION_HEAD, FCO_JUNCTION_HEAD_RIGHT)
             for line in data:
+                print(innerbar)
+                if innerbar[0] != self.framecharset[FCO_JUNCTION_LEFT]:
+                    # head separator line was different from the remaining => switch after the line above the first data row == between head and content
+                    innerbar = self.bar(col_width, FCO_JUNCTION_LEFT, FCO_INNER_BAR_HORIZONTAL, FCO_INNER_JUNCTION, FCO_JUNCTION_RIGHT)
                 print(line_format % tuple( nvlstr(line[i], '(NULL)') for i in range(len(self.conn.description)) ))
                 if self.htmlFile:
                     self.writeHTML('<tr>' + html_line_format % tuple( nvlstr(line[i], '<i>NULL</i>') for i in range(len(self.conn.description)) ) + '\n</tr>\n')
-            print(sep)
             self.writeHTML('</tbody></table>\n')
         else:
             print('(0 rows)')
             self.writeHTML('</tbody></table>\n<p><i>(0 rows)</i></p>\n')
+        print(self.bar(col_width, FCO_CORNER_LOWER_LEFT, FCO_OUTER_BAR_BOTTOM, FCO_JUNCTION_BOTTOM, FCO_CORNER_LOWER_RIGHT))
 
 ###############################################################################
 def main():
