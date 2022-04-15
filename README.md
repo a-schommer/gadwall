@@ -14,6 +14,7 @@ This fork is mainly amended in three ways:
 | connect to an existing, file based duckdb database | use an in-memory-database |
 | run queries against that database                  | be installed from PyPi / using pip |
 | create an HTML output of the query results         | create a database |
+| show explain plans nicely                          | show explain plans flawless in HTML output |
 | | deal with every datatype supported by duckdb (try explicitely casting the results to varchar if you have issues; this is basically no limitation of gadwall but of the Python API of duckdb) |
 | | deal with every error from duckdb |
 | | run scripts |
